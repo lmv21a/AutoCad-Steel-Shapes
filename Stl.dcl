@@ -68,6 +68,11 @@ stl : dialog {
 
     // --- Column 4: Size + Info ---
     : column {
+      : edit_box {
+        label = "Filter:";
+        key = "filter_text";
+        edit_width = 20;
+      }
       : list_box {
         label = "Available Sizes";
         key = "get_size";
