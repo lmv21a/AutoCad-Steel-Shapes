@@ -78,10 +78,13 @@
 (defun RTD (A) (/ (* A 180.0) pi))
 
 ; Read data file and parse "size string", nth 0, for display in list box as variable display_list.
-(defun STL_READ_DIM_FILE (/ A AA)
+(defun STL_READ_DIM_FILE (/ A AA CURRENT_FILTER)
+  (setq CURRENT_FILTER (get_tile "filter_text"))
   (STL_SET_NIL)
   (setq A "")
   (STL_DEFAULTS)
+  (setq STL_FILTER_TEXT (if CURRENT_FILTER CURRENT_FILTER ""))
+  (set_tile "filter_text" STL_FILTER_TEXT)
   (STL_OPEN_DIM_FILE)
   (while (/= A NIL)
     (setq A (read-line STL_DIM_FILE))
@@ -94,11 +97,67 @@
       )
     )
   )
-  (setq DISPLAY_LIST (reverse AA))
+  (setq STL_FULL_LIST (reverse AA))
   (close STL_DIM_FILE)
+  (STL_APPLY_FILTER)
+)
+
+;-----------------------------------------------------------------------;
+(defun STL_FIND_INDEX (ITEM LST / IDX RESULT)
+  (if (and ITEM LST)
+    (progn
+      (setq IDX 0)
+      (while (and LST (not RESULT))
+        (if (= (strcase (car LST)) (strcase ITEM))
+          (setq RESULT IDX)
+        )
+        (setq IDX (+ IDX 1))
+        (setq LST (cdr LST))
+      )
+    )
+  )
+  RESULT
+)
+
+;-----------------------------------------------------------------------;
+(defun STL_APPLY_FILTER (/ FILTER_TEXT PATTERN FILTERED-LIST MATCH-INDEX)
+  (setq FILTER_TEXT (if STL_FILTER_TEXT (strcase STL_FILTER_TEXT) ""))
+  (if STL_FULL_LIST
+    (if (= FILTER_TEXT "")
+      (setq DISPLAY_LIST STL_FULL_LIST)
+      (progn
+        (setq FILTERED-LIST NIL)
+        (setq PATTERN (strcat "*" FILTER_TEXT "*"))
+        (foreach ITEM STL_FULL_LIST
+          (if (wcmatch (strcase ITEM) PATTERN)
+            (setq FILTERED-LIST (cons ITEM FILTERED-LIST))
+          )
+        )
+        (setq DISPLAY_LIST (reverse FILTERED-LIST))
+      )
+    )
+    (setq DISPLAY_LIST NIL)
+  )
   (start_list "get_size")
-  (mapcar 'add_list DISPLAY_LIST)
+  (mapcar 'add_list (or DISPLAY_LIST '()))
   (end_list)
+  (setq MATCH-INDEX (STL_FIND_INDEX SIZE DISPLAY_LIST))
+  (cond
+    ((numberp MATCH-INDEX)
+     (setq INDEX MATCH-INDEX)
+     (set_tile "get_size" (itoa INDEX))
+    )
+    (T
+     (setq INDEX NIL)
+     (set_tile "get_size" "")
+    )
+  )
+)
+
+;-----------------------------------------------------------------------;
+(defun STL_FILTER_UPDATE (VALUE)
+  (setq STL_FILTER_TEXT (if VALUE VALUE ""))
+  (STL_APPLY_FILTER)
 )
 
 ;-----------------------------------------------------------------------;
@@ -108,6 +167,7 @@
     STL_DEF_SIZE NIL
     STL_DEF_WHICH_VIEW NIL
     STL_DEF_DISPLAY_LIST NIL
+    STL_DEF_FULL_LIST NIL
     STL_DEF_INDEX NIL
     STL_DEF_D NIL
     STL_DEF_TW NIL
@@ -132,6 +192,7 @@
     STL_DEF_DEPTH_TUBEDIM NIL
     STL_DEF_WIDTH_TUBEDIM NIL
     STL_DEF_THK_TUBEDIM NIL
+    STL_DEF_FILTER_TEXT NIL
     STL_DEF_2DEND NIL
     STL_DEF_2DTOP NIL
     STL_DEF_2DSIDE NIL
@@ -143,6 +204,7 @@
     SIZE NIL
     WHICH_VIEW NIL
     DISPLAY_LIST NIL
+    STL_FULL_LIST NIL
     INDEX NIL
     D NIL
     TW NIL
@@ -158,6 +220,7 @@
     TUBE_HORIZ NIL
     TUBE_THICK NIL
     SCALE NIL
+    STL_FILTER_TEXT ""
   )
   (set_tile "depth" "")
   (set_tile "web" "")
@@ -169,6 +232,7 @@
   (set_tile "depth_tube" "")
   (set_tile "width_tube" "")
   (set_tile "thk_tube" "")
+  (set_tile "filter_text" "")
   (start_list "get_size")
   (mapcar 'add_list DISPLAY_LIST)
   (end_list)
@@ -1523,16 +1587,27 @@
   (set_tile "stl_met_scale" "0")
   (mode_tile "stl_met_scale" 1)
   (mode_tile "length" 1)
+  (if (/= STL_DEF_FILTER_TEXT NIL)
+    (progn
+      (setq STL_FILTER_TEXT STL_DEF_FILTER_TEXT)
+      (set_tile "filter_text" STL_DEF_FILTER_TEXT)
+    )
+    (progn
+      (setq STL_FILTER_TEXT "")
+      (set_tile "filter_text" "")
+    )
+  )
   (if (/= STL_DEF_NEWTILE NIL)
     (setq NEWTILE STL_DEF_NEWTILE)
   ) ;_ end of if
+  (if (/= STL_DEF_FULL_LIST NIL)
+    (setq STL_FULL_LIST STL_DEF_FULL_LIST)
+  ) ;_ end of if
   (if (/= STL_DEF_DISPLAY_LIST NIL)
-    (progn
-      (setq DISPLAY_LIST STL_DEF_DISPLAY_LIST)
-      (start_list "get_size")
-      (mapcar 'add_list DISPLAY_LIST)
-      (end_list)
-    ) ;_ end of progn
+    (setq DISPLAY_LIST STL_DEF_DISPLAY_LIST)
+  ) ;_ end of if
+  (if (and (= STL_FULL_LIST NIL) (/= DISPLAY_LIST NIL))
+    (setq STL_FULL_LIST DISPLAY_LIST)
   ) ;_ end of if
   (if (/= STL_DEF_SIZE NIL)
     (setq SIZE STL_DEF_SIZE)
@@ -1540,6 +1615,7 @@
   (if (/= STL_DEF_INDEX NIL)
     (setq INDEX STL_DEF_INDEX)
   ) ;_ end of if
+  (STL_APPLY_FILTER)
   (if (/= STL_DEF_D NIL)
     (setq D STL_DEF_D)
   ) ;_ end of if
@@ -1699,6 +1775,7 @@
     STL_DEF_SIZE SIZE
     STL_DEF_WHICH_VIEW WHICH_VIEW
     STL_DEF_DISPLAY_LIST DISPLAY_LIST
+    STL_DEF_FULL_LIST STL_FULL_LIST
     STL_DEF_INDEX INDEX
     STL_DEF_D D
     STL_DEF_TW TW
@@ -1734,6 +1811,8 @@
      (get_tile "width_tube")
     STL_DEF_THK_TUBEDIM
      (get_tile "thk_tube")
+    STL_DEF_FILTER_TEXT
+     (get_tile "filter_text")
     STL_DEF_2DEND
      (get_tile "2d_end")
     STL_DEF_2DTOP
@@ -2197,6 +2276,7 @@
     "form_zee_shape"
     (strcat "(setq newtile $key)" "(open_form_dialog)")
   ) ;_ end of action_tile
+  (action_tile "filter_text" "(STL_FILTER_UPDATE $value)")
   (action_tile
     "get_size"
     (strcat
@@ -2257,7 +2337,7 @@
 ) ;end STL_DIALOG
   ;--------------------------------------------------------------------;
 (defun
-   C:STL (/ NEWTILE SIZE WHICH_VIEW DISPLAY_LIST INDEX D TW BF TF K
+   C:STL (/ NEWTILE SIZE WHICH_VIEW DISPLAY_LIST STL_FULL_LIST STL_FILTER_TEXT INDEX D TW BF TF K
           TEMP_DIST1 TEMP_DIST2 L_VERT L_HORIZ L_THICK TUBE_VERT
           TUBE_HORIZ TUBE_THICK STL_DIM_FILE
          )
